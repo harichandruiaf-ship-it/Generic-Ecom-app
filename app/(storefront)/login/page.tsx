@@ -1,0 +1,35 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/customer-auth";
+import { LoginForm } from "./LoginForm";
+
+export const dynamic = "force-dynamic";
+
+type Props = { searchParams: Promise<{ next?: string }> };
+
+export default async function LoginPage({ searchParams }: Props) {
+  const user = await getCurrentUser();
+  const { next: nextUrl } = await searchParams;
+  if (user) redirect(nextUrl && nextUrl.startsWith("/") ? nextUrl : "/account");
+
+  return (
+    <div className="mx-auto max-w-sm px-4 py-16 sm:px-6">
+      <nav className="mb-6 text-sm text-[var(--foreground)]/70">
+        <Link href="/" className="transition hover:text-[var(--pink-500)]">Home</Link>
+        <span className="mx-2">/</span>
+        <span className="font-medium text-[var(--pink-600)]">Log in</span>
+      </nav>
+      <h1 className="text-2xl font-bold tracking-tight text-[var(--pink-600)]">Log in</h1>
+      <p className="mt-2 text-sm text-[var(--foreground)]/70">
+        Log in to your account to manage your profile and wishlist.
+      </p>
+      <LoginForm nextUrl={nextUrl} />
+      <p className="mt-6 text-center text-sm text-[var(--foreground)]/70">
+        Don&apos;t have an account?{" "}
+        <Link href="/register" className="font-medium text-[var(--pink-500)] hover:underline">
+          Sign up
+        </Link>
+      </p>
+    </div>
+  );
+}

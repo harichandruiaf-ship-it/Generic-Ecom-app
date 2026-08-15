@@ -1,0 +1,352 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  title          String
+  slug           String        @unique
+  description    String?
+  priceCents     Int
+  currency       String        @default("USD")
+  status         ProductStatus @default(DRAFT)
+  images         Json?
+  attributes     Json?
+  stockQuantity  Int?          // null = no inventory tracking (unlimited)
+
+  categories   ProductCategory[]
+  tags         ProductTag[]
+  wishlistedBy UserWishlist[]
+  reviews      ProductReview[]
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ProductReview {
+  id          String       @id @default(cuid())
+  productId   String
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  authorName  String       // required for display; from user or form
+  authorEmail String?      // for guests; optional if from user
+  rating      Int          // 1-5
+  comment     String?
+  status      ReviewStatus @default(PENDING)
+
+  createdAt   DateTime     @default(now())
+
+  @@index([productId])
+  @@index([status])
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  image     String?    // optional category photo for home/category listing
+
+  parentId  String?
+  parent    Category?  @relation("CategoryToChildren", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryToChildren")
+
+  products  ProductCategory[]
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Tag {
+  id        String      @id @default(cuid())
+  name      String
+  slug      String      @unique
+
+  products  ProductTag[]
+
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model ProductCategory {
+  productId String
+  categoryId String
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category  Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
+}
+
+model ProductTag {
+  productId String
+  tagId     String
+
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([productId, tagId])
+  @@index([tagId])
+}
+
+enum BannerLinkType {
+  TAG
+  CATEGORY
+  PRODUCT
+}
+
+// Where the banner appears in the store (screen/placement)
+enum BannerPlacement {
+  HOME_HERO         // Home: main carousel
+  HOME_PROMO_GRID   // Home: promo cards row (e.g. 2–3 banners)
+  CATEGORY_TOP      // Category/Tag listing: top full-width or card
+  CATEGORY_SIDEBAR  // Category/Tag/Products listing: sidebar
+  PRODUCT_PAGE      // Product detail: below content or cross-sell
+  CART_PROMO        // Cart page: promo strip (e.g. free shipping)
+  FOOTER_STRIP      // Above footer: thin full-width strip
+}
+
+enum BannerLayout {
+  FULL_WIDTH  // Full-width block
+  CARD        // Card in a grid
+  BOX         // Compact box (e.g. sidebar)
+}
+
+enum BannerAnimation {
+  NONE
+  FADE
+  SLIDE
+  ZOOM
+}
+
+model AdBanner {
+  id        String          @id @default(cuid())
+  image     String
+  linkType  BannerLinkType
+  linkSlug  String
+  sortOrder Int             @default(0)
+  placement BannerPlacement @default(HOME_HERO)
+  layout    BannerLayout?   // optional; used for rendering
+  animation BannerAnimation? @default(NONE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([placement])
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+model Coupon {
+  id              String     @id @default(cuid())
+  code            String     @unique
+  type            CouponType
+  valuePercent    Int?       // e.g. 10 = 10% off (when type PERCENT)
+  valueCents      Int?       // fixed discount in cents (when type FIXED)
+  minOrderCents   Int        @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Store / checkout settings (single row, id = "default")
+model StoreSettings {
+  id                String   @id @default("default")
+  cartEnabled       Boolean  @default(true)
+  checkoutEnabled   Boolean  @default(true)
+  taxRatePercent    Float    @default(0)
+  currency          String   @default("USD")
+  shippingEnabled   Boolean  @default(true)
+  thankYouMessage   String?
+  termsText         String?
+  minimumOrderCents Int      @default(0)
+  themePalette           String   @default("pink")  // pink | blue | green | slate | coral | violet
+  exchangeRatesOverride  Json?    // optional: { "USD": 1, "INR": 83.5, ... } from USD; if set, used instead of live API
+  lowStockThreshold      Int      @default(5)      // alert when product stock <= this (inventory management)
+
+  // Company / site profile (admin-editable)
+  siteName            String?  // e.g. "Ecom Store"
+  logoUrl             String?  // image URL for header logo
+  contactEmail        String?
+  contactPhone        String?
+  showTopBar          Boolean  @default(true)   // top bar with contact + social
+  headerNavItems      Json?    // [{ label, href }] custom nav; empty = use defaults
+  socialLinks         Json?    // { facebook?, twitter?, instagram?, linkedin?, youtube? }
+  aboutUsContent      String?  // HTML or plain text for About Us page
+  contactPageContent  String?  // optional extra content for Contact page
+  footerTagline       String?
+  footerCopyright     String?  // default "© {year} {siteName}. All rights reserved."
+
+  updatedAt DateTime @updatedAt
+}
+
+enum BlogPostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model BlogPost {
+  id          String         @id @default(cuid())
+  title       String
+  slug        String         @unique
+  excerpt     String?
+  content     String         // HTML or markdown
+  imageUrl    String?
+  status      BlogPostStatus @default(DRAFT)
+  publishedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([status])
+  @@index([publishedAt])
+}
+
+model ShippingMethod {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  priceCents  Int     @default(0)
+  isDefault   Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model Order {
+  id                   String      @id @default(cuid())
+  userId               String?     // set when customer is logged in
+  user                 User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status               OrderStatus @default(PENDING)
+  trackingCode         String?    // carrier tracking number
+  email                String
+  shippingName         String
+  shippingLine1        String
+  shippingLine2       String?
+  shippingCity         String
+  shippingState        String?
+  shippingPostalCode   String?
+  shippingCountry      String
+  billingSameAsShipping Boolean   @default(true)
+  billingName          String?
+  billingLine1         String?
+  billingLine2         String?
+  billingCity          String?
+  billingState         String?
+  billingPostalCode    String?
+  billingCountry       String?
+  shippingMethodId     String?
+  shippingMethod       ShippingMethod? @relation(fields: [shippingMethodId], references: [id])
+  paymentMethod        String     @default("cod")
+  subtotalCents        Int
+  shippingCents        Int        @default(0)
+  taxCents             Int        @default(0)
+  discountCents        Int        @default(0)
+  totalCents           Int
+  currency             String     @default("USD")
+  couponCode           String?
+  customerNote         String?
+  internalNote         String?
+
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  title       String
+  slug        String
+  priceCents  Int
+  quantity    Int
+  totalCents  Int
+
+  @@index([orderId])
+}
+
+// Store customer accounts (basic auth; OAuth can be added later)
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  phone        String?
+  preferences  Json?    // e.g. { recentlyViewedIds: string[], theme?, timezone?, locale? }
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  wishlist   UserWishlist[]
+  addresses  UserAddress[]
+  orders     Order[]
+  reviews    ProductReview[]
+}
+
+model UserAddress {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label       String   // e.g. "Home", "Office"
+  line1       String
+  line2       String?
+  city        String
+  state       String?
+  postalCode  String?
+  country     String
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model UserWishlist {
+  userId    String
+  productId String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, productId])
+  @@index([userId])
+  @@index([productId])
+}
+
